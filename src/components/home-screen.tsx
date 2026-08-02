@@ -24,7 +24,6 @@ export function HomeScreen() {
   const [entries, setEntries] = useState<Entry[]>(() => readCache() ?? []);
   const [ready, setReady] = useState(false);
   const [userId, setUserId] = useState("");
-  const [email, setEmail] = useState<string | null>(null);
   const [view, setView] = useState<View>("all");
   const [showDone, setShowDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +49,6 @@ export function HomeScreen() {
       }
       if (!alive) return;
       setUserId(session.user.id);
-      setEmail(session.user.email ?? null);
 
       const { data, error: fetchError } = await supabase
         .from("entries")
@@ -141,6 +139,11 @@ export function HomeScreen() {
   }
 
   async function handleSignOut() {
+    // 再ログインにはメールの送信が要り、その回数には制限がある。
+    // 上部の小さなボタンを誤って触ったときの被害が大きいので一度止める。
+    if (!window.confirm("ログアウトする？ 次に入るときはメールのリンクが要る。")) {
+      return;
+    }
     await supabase.auth.signOut();
     clearCache();
     router.replace("/login");
@@ -165,7 +168,7 @@ export function HomeScreen() {
           onClick={handleSignOut}
           className="text-xs text-muted hover:text-foreground"
         >
-          {email ?? "…"} / ログアウト
+          ログアウト
         </button>
       </header>
 
