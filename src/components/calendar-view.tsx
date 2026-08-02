@@ -46,7 +46,7 @@ export function CalendarView({
   }
 
   return (
-    <div className="mt-4">
+    <div>
       <div className="mb-2 flex items-center justify-between">
         <button
           type="button"

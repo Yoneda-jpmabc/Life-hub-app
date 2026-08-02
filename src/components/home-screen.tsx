@@ -12,7 +12,9 @@ import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
 
-type View = EntryKind | "all" | "calendar";
+type View = EntryKind | "all";
+/** 一覧とカレンダーは絞り込みではなく見方そのものが違うので、画面を分ける。 */
+type Mode = "list" | "calendar";
 
 export function HomeScreen() {
   const router = useRouter();
@@ -20,6 +22,7 @@ export function HomeScreen() {
   const [ready, setReady] = useState(false);
   const [userId, setUserId] = useState("");
   const [view, setView] = useState<View>("all");
+  const [mode, setMode] = useState<Mode>("list");
   const [showDone, setShowDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -153,72 +156,90 @@ export function HomeScreen() {
   const tabs: { key: View; label: string }[] = [
     { key: "all", label: "すべて" },
     ...ENTRY_KINDS.map((kind) => ({ key: kind as View, label: KIND_LABELS[kind] })),
-    { key: "calendar", label: "カレンダー" },
   ];
 
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 pb-16 pt-6">
       <header className="mb-5 flex items-baseline justify-between gap-3">
         <h1 className="text-xl font-semibold tracking-tight">Life Hub</h1>
-        <button
-          type="button"
-          onClick={handleSignOut}
-          className="text-xs text-muted hover:text-foreground"
-        >
-          ログアウト
-        </button>
-      </header>
-
-      <Composer onSubmit={handleCreate} knownTags={knownTags} error={error} />
-
-      <nav className="mt-6 flex flex-wrap items-center gap-1">
-        {tabs.map((tab) => (
+        <div className="flex items-center gap-3 text-xs">
           <button
-            key={tab.key}
             type="button"
-            onClick={() => setView(tab.key)}
-            aria-current={view === tab.key ? "page" : undefined}
+            onClick={() => setMode(mode === "calendar" ? "list" : "calendar")}
             className={
-              view === tab.key
-                ? "rounded-full bg-surface px-3 py-1 text-sm font-medium ring-1 ring-border"
-                : "rounded-full px-3 py-1 text-sm text-muted transition-colors hover:text-foreground"
+              mode === "calendar"
+                ? "rounded-full bg-accent px-3 py-1 font-medium text-accent-contrast"
+                : "rounded-full px-3 py-1 text-muted transition-colors hover:text-foreground"
             }
           >
-            {tab.label}
+            {mode === "calendar" ? "一覧へ" : "カレンダー"}
           </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => setShowDone((value) => !value)}
-          className="ml-auto text-xs text-muted underline transition-colors hover:text-foreground"
-        >
-          {showDone ? "完了を隠す" : "完了も見る"}
-        </button>
-      </nav>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="text-muted hover:text-foreground"
+          >
+            ログアウト
+          </button>
+        </div>
+      </header>
 
-      {view === "calendar" ? (
+      {mode === "calendar" ? (
+        // カレンダーは入力欄を挟まず画面の先頭に置く。
+        // 日を選んだときに、その日の中身がそのまま下に続いて見えるようにするため。
         <CalendarView
           entries={undone}
           onToggle={handleToggle}
           onUpdate={handleUpdate}
           onDelete={handleDelete}
         />
-      ) : visible.length > 0 ? (
-        <ul className="mt-4 space-y-2">
-          {visible.map((entry) => (
-            <EntryItem
-              key={entry.id}
-              entry={entry}
-              onToggle={handleToggle}
-              onUpdate={handleUpdate}
-              onDelete={handleDelete}
-            />
-          ))}
-        </ul>
       ) : (
-        <p className="mt-10 text-center text-sm text-muted">
-          {ready ? "まだ何もない。上の欄に思いついたことから書いてみて。" : "読み込み中…"}
-        </p>
+        <>
+          <Composer onSubmit={handleCreate} knownTags={knownTags} error={error} />
+
+          <nav className="mt-6 flex flex-wrap items-center gap-1">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setView(tab.key)}
+                aria-current={view === tab.key ? "page" : undefined}
+                className={
+                  view === tab.key
+                    ? "rounded-full bg-surface px-3 py-1 text-sm font-medium ring-1 ring-border"
+                    : "rounded-full px-3 py-1 text-sm text-muted transition-colors hover:text-foreground"
+                }
+              >
+                {tab.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setShowDone((value) => !value)}
+              className="ml-auto text-xs text-muted underline transition-colors hover:text-foreground"
+            >
+              {showDone ? "完了を隠す" : "完了も見る"}
+            </button>
+          </nav>
+
+          {visible.length > 0 ? (
+            <ul className="mt-4 space-y-2">
+              {visible.map((entry) => (
+                <EntryItem
+                  key={entry.id}
+                  entry={entry}
+                  onToggle={handleToggle}
+                  onUpdate={handleUpdate}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-10 text-center text-sm text-muted">
+              {ready ? "まだ何もない。上の欄に思いついたことから書いてみて。" : "読み込み中…"}
+            </p>
+          )}
+        </>
       )}
     </main>
   );

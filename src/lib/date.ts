@@ -15,11 +15,18 @@ export function todayKey(): DayKey {
   return toDayKey(new Date());
 }
 
-/** その月の1日から末日までを、週の頭(日曜)で揃えた6週分の升目にする。 */
+/**
+ * その月の1日から末日までを、週の頭(日曜)で揃えた升目にする。
+ * 週数はその月に必要な分だけ(5または6)。常に6週にすると、
+ * 中身が他月だけの行ができて画面の高さを無駄に使う。
+ */
 export function monthGrid(year: number, month: number): Date[] {
   const first = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const weeks = Math.ceil((first.getDay() + daysInMonth) / 7);
   const start = new Date(year, month, 1 - first.getDay());
-  return Array.from({ length: 42 }, (_, index) => {
+
+  return Array.from({ length: weeks * 7 }, (_, index) => {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
     return date;
