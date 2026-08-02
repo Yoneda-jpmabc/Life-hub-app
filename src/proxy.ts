@@ -7,8 +7,8 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    // 静的ファイルと画像以外のすべてのリクエストを通す
-    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-  ],
+  // トップ画面は静的配信のまま CDN から返したいので通さない。
+  // 端末側の Supabase クライアントが自分でトークンを更新するため、
+  // セッションの世話が要るのはサーバーで判定するログイン画面だけ。
+  matcher: ["/login"],
 };

@@ -13,7 +13,17 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Next.js 16 (App Router, Turbopack) + Tailwind v4 + TypeScript
 - Supabase (Postgres + Auth)。プロジェクト ref: `hqjoncbueuadqxkkpdsn`（東京リージョン）
 - 認証はメールのマジックリンクのみ。パスワードは使わない
-- `src/proxy.ts` がセッション更新を担当（Next 16 で `middleware.ts` は非推奨）
+- `src/proxy.ts` がセッション更新を担当（Next 16 で `middleware.ts` は非推奨）。
+  トップ画面を静的配信のままにするため、matcher は `/login` だけに絞ってある
+
+## 画面の作り
+
+トップ画面 (`/`) はサーバー処理を持たない静的ページで、中身は
+`src/components/home-screen.tsx` が端末側で描く。データは Supabase を
+直接読み書きし、結果を localStorage に控えて次回の初期表示に使う。
+
+回線が細い環境で体感を保つための構成なので、ここにサーバー処理を
+足し戻すときは、通信回数が増えないか確認すること。
 
 ## データ設計の考え方
 

@@ -5,8 +5,6 @@ import { useState } from "react";
 import { KIND_LABELS, isEntryKind, type Entry } from "@/lib/entries";
 import { formatStamp } from "@/lib/format";
 
-type Handler = (formData: FormData) => Promise<void>;
-
 export function EntryItem({
   entry,
   onToggle,
@@ -14,67 +12,68 @@ export function EntryItem({
   onDelete,
 }: {
   entry: Entry;
-  onToggle: Handler;
-  onUpdate: Handler;
-  onDelete: Handler;
+  onToggle: (id: string, done: boolean) => void;
+  onUpdate: (id: string, body: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(entry.body);
   const kindLabel = isEntryKind(entry.kind) ? KIND_LABELS[entry.kind] : entry.kind;
+
+  function save() {
+    const trimmed = draft.trim();
+    setEditing(false);
+    if (trimmed && trimmed !== entry.body) onUpdate(entry.id, trimmed);
+  }
 
   return (
     <li className="rounded-2xl border border-border bg-surface p-3">
       <div className="flex items-start gap-3">
         {entry.kind === "task" && (
-          <form action={onToggle} className="pt-0.5">
-            <input type="hidden" name="id" value={entry.id} />
-            <input type="hidden" name="done" value={String(!entry.done)} />
-            <button
-              type="submit"
-              aria-label={entry.done ? "未完了に戻す" : "完了にする"}
-              className={
-                entry.done
-                  ? "flex h-5 w-5 items-center justify-center rounded-md bg-accent text-xs text-accent-contrast"
-                  : "h-5 w-5 rounded-md border border-border transition-colors hover:border-accent"
-              }
-            >
-              {entry.done ? "✓" : ""}
-            </button>
-          </form>
+          <button
+            type="button"
+            onClick={() => onToggle(entry.id, !entry.done)}
+            aria-label={entry.done ? "未完了に戻す" : "完了にする"}
+            className={
+              entry.done
+                ? "mt-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-accent text-xs text-accent-contrast"
+                : "mt-0.5 h-5 w-5 rounded-md border border-border transition-colors hover:border-accent"
+            }
+          >
+            {entry.done ? "✓" : ""}
+          </button>
         )}
 
         <div className="min-w-0 flex-1">
           {editing ? (
-            <form
-              action={async (formData) => {
-                setEditing(false);
-                await onUpdate(formData);
-              }}
-              className="space-y-2"
-            >
-              <input type="hidden" name="id" value={entry.id} />
+            <div className="space-y-2">
               <textarea
-                name="body"
-                defaultValue={entry.body}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
                 rows={3}
                 autoFocus
                 className="w-full resize-none rounded-lg border border-border bg-background p-2 text-base outline-none"
               />
               <div className="flex gap-2">
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={save}
                   className="rounded-lg bg-accent px-3 py-1 text-xs font-medium text-accent-contrast"
                 >
                   保存
                 </button>
                 <button
                   type="button"
-                  onClick={() => setEditing(false)}
+                  onClick={() => {
+                    setDraft(entry.body);
+                    setEditing(false);
+                  }}
                   className="rounded-lg px-3 py-1 text-xs text-muted"
                 >
                   やめる
                 </button>
               </div>
-            </form>
+            </div>
           ) : (
             <p
               className={
@@ -112,17 +111,15 @@ export function EntryItem({
                 >
                   編集
                 </button>
-                <form
-                  action={onDelete}
-                  onSubmit={(event) => {
-                    if (!window.confirm("これを削除する？")) event.preventDefault();
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm("これを削除する？")) onDelete(entry.id);
                   }}
+                  className="transition-colors hover:text-foreground"
                 >
-                  <input type="hidden" name="id" value={entry.id} />
-                  <button type="submit" className="transition-colors hover:text-foreground">
-                    削除
-                  </button>
-                </form>
+                  削除
+                </button>
               </>
             )}
           </div>

@@ -1,0 +1,220 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+
+import { Composer } from "@/components/composer";
+import { EntryItem } from "@/components/entry-item";
+import { clearCache, readCache, writeCache } from "@/lib/entry-cache";
+import {
+  ENTRY_KINDS,
+  KIND_LABELS,
+  extractTags,
+  type Entry,
+  type EntryKind,
+} from "@/lib/entries";
+import { createClient } from "@/lib/supabase/client";
+
+const supabase = createClient();
+
+type View = EntryKind | "all";
+
+export function HomeScreen() {
+  const router = useRouter();
+  const [entries, setEntries] = useState<Entry[]>(() => readCache() ?? []);
+  const [ready, setReady] = useState(false);
+  const [userId, setUserId] = useState("");
+  const [email, setEmail] = useState<string | null>(null);
+  const [view, setView] = useState<View>("all");
+  const [showDone, setShowDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  /** 一覧を保持し、同じ内容を端末にも控える。 */
+  const commit = useCallback((next: Entry[]) => {
+    setEntries(next);
+    writeCache(next);
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      // getSession は手元の cookie を読むだけなので通信が発生しない
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        router.replace("/login");
+        return;
+      }
+      if (!alive) return;
+      setUserId(session.user.id);
+      setEmail(session.user.email ?? null);
+
+      const { data, error: fetchError } = await supabase
+        .from("entries")
+        .select("*")
+        .eq("archived", false)
+        .order("created_at", { ascending: false })
+        .limit(500);
+
+      if (!alive) return;
+      if (fetchError) {
+        setError(`読み込めんかった: ${fetchError.message}`);
+      } else if (data) {
+        commit(data);
+      }
+      setReady(true);
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [router, commit]);
+
+  /** 画面を先に更新し、DB 側が失敗したら元に戻す。 */
+  async function apply(next: Entry[], run: () => Promise<{ error: unknown }>) {
+    const previous = entries;
+    commit(next);
+    setError(null);
+
+    const { error: writeError } = await run();
+    if (writeError) {
+      commit(previous);
+      setError(
+        `保存できひんかった: ${
+          writeError instanceof Error ? writeError.message : String(writeError)
+        }`,
+      );
+    }
+  }
+
+  function handleCreate(body: string, kind: EntryKind) {
+    const now = new Date().toISOString();
+    const entry: Entry = {
+      // id を手元で決めておくと、保存後に差し替える必要がない
+      id: crypto.randomUUID(),
+      user_id: userId,
+      kind,
+      body,
+      tags: extractTags(body),
+      done: false,
+      done_at: null,
+      due_at: null,
+      archived: false,
+      created_at: now,
+      updated_at: now,
+    };
+
+    void apply([entry, ...entries], async () =>
+      supabase.from("entries").insert({
+        id: entry.id,
+        kind: entry.kind,
+        body: entry.body,
+        tags: entry.tags,
+        created_at: now,
+      }),
+    );
+  }
+
+  function handleToggle(id: string, done: boolean) {
+    const next = entries.map((item) =>
+      item.id === id ? { ...item, done, done_at: done ? new Date().toISOString() : null } : item,
+    );
+    void apply(next, async () => supabase.from("entries").update({ done }).eq("id", id));
+  }
+
+  function handleUpdate(id: string, body: string) {
+    const tags = extractTags(body);
+    const next = entries.map((item) => (item.id === id ? { ...item, body, tags } : item));
+    void apply(next, async () =>
+      supabase.from("entries").update({ body, tags }).eq("id", id),
+    );
+  }
+
+  function handleDelete(id: string) {
+    void apply(
+      entries.filter((item) => item.id !== id),
+      async () => supabase.from("entries").delete().eq("id", id),
+    );
+  }
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    clearCache();
+    router.replace("/login");
+  }
+
+  // 絞り込みは手元のデータで完結するので通信が発生しない
+  const visible = entries.filter(
+    (item) => (view === "all" || item.kind === view) && (showDone || !item.done),
+  );
+
+  const tabs: { key: View; label: string }[] = [
+    { key: "all", label: "すべて" },
+    ...ENTRY_KINDS.map((kind) => ({ key: kind as View, label: KIND_LABELS[kind] })),
+  ];
+
+  return (
+    <main className="mx-auto w-full max-w-2xl flex-1 px-4 pb-16 pt-6">
+      <header className="mb-5 flex items-baseline justify-between gap-3">
+        <h1 className="text-xl font-semibold tracking-tight">Life Hub</h1>
+        <button
+          type="button"
+          onClick={handleSignOut}
+          className="text-xs text-muted hover:text-foreground"
+        >
+          {email ?? "…"} / ログアウト
+        </button>
+      </header>
+
+      <Composer onSubmit={handleCreate} error={error} />
+
+      <nav className="mt-6 flex flex-wrap items-center gap-1">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setView(tab.key)}
+            aria-current={view === tab.key ? "page" : undefined}
+            className={
+              view === tab.key
+                ? "rounded-full bg-surface px-3 py-1 text-sm font-medium ring-1 ring-border"
+                : "rounded-full px-3 py-1 text-sm text-muted transition-colors hover:text-foreground"
+            }
+          >
+            {tab.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setShowDone((value) => !value)}
+          className="ml-auto text-xs text-muted underline transition-colors hover:text-foreground"
+        >
+          {showDone ? "完了を隠す" : "完了も見る"}
+        </button>
+      </nav>
+
+      {visible.length > 0 ? (
+        <ul className="mt-4 space-y-2">
+          {visible.map((entry) => (
+            <EntryItem
+              key={entry.id}
+              entry={entry}
+              onToggle={handleToggle}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+            />
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-10 text-center text-sm text-muted">
+          {ready
+            ? "まだ何もない。上の欄に思いついたことから書いてみて。"
+            : "読み込み中…"}
+        </p>
+      )}
+    </main>
+  );
+}
