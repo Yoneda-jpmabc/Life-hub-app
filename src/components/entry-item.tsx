@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 
-import { KIND_LABELS, isEntryKind, type Entry } from "@/lib/entries";
+import { formatDay } from "@/lib/date";
+import { DATEABLE_KINDS, KIND_LABELS, isEntryKind, parseTags, type Entry } from "@/lib/entries";
 import { formatStamp } from "@/lib/format";
+
+export type EntryPatch = { body: string; tags: string[]; due_on: string | null };
 
 export function EntryItem({
   entry,
@@ -13,17 +16,33 @@ export function EntryItem({
 }: {
   entry: Entry;
   onToggle: (id: string, done: boolean) => void;
-  onUpdate: (id: string, body: string) => void;
+  onUpdate: (id: string, patch: EntryPatch) => void;
   onDelete: (id: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(entry.body);
+  const [dueOn, setDueOn] = useState(entry.due_on ?? "");
+
   const kindLabel = isEntryKind(entry.kind) ? KIND_LABELS[entry.kind] : entry.kind;
+  const canHaveDate = isEntryKind(entry.kind) && DATEABLE_KINDS.includes(entry.kind);
 
   function save() {
-    const trimmed = draft.trim();
     setEditing(false);
-    if (trimmed && trimmed !== entry.body) onUpdate(entry.id, trimmed);
+    const parsed = parseTags(draft);
+    if (!parsed.body) return;
+
+    // 編集中に書き足した #タグ も拾い、元から付いていたものと合わせる
+    const tags = [...new Set([...entry.tags, ...parsed.tags])];
+    const nextDue = canHaveDate && dueOn ? dueOn : null;
+
+    if (
+      parsed.body === entry.body &&
+      nextDue === entry.due_on &&
+      tags.length === entry.tags.length
+    ) {
+      return;
+    }
+    onUpdate(entry.id, { body: parsed.body, tags, due_on: nextDue });
   }
 
   return (
@@ -54,6 +73,15 @@ export function EntryItem({
                 autoFocus
                 className="w-full resize-none rounded-lg border border-border bg-background p-2 text-base outline-none"
               />
+              {canHaveDate && (
+                <input
+                  type="date"
+                  value={dueOn}
+                  onChange={(event) => setDueOn(event.target.value)}
+                  aria-label="日付"
+                  className="rounded-lg border border-border bg-background px-2 py-1 text-xs outline-none"
+                />
+              )}
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -66,6 +94,7 @@ export function EntryItem({
                   type="button"
                   onClick={() => {
                     setDraft(entry.body);
+                    setDueOn(entry.due_on ?? "");
                     setEditing(false);
                   }}
                   className="rounded-lg px-3 py-1 text-xs text-muted"
@@ -86,21 +115,23 @@ export function EntryItem({
             </p>
           )}
 
-          {entry.tags.length > 0 && !editing && (
-            <ul className="mt-2 flex flex-wrap gap-1">
+          {!editing && (
+            <div className="mt-2 flex flex-wrap items-center gap-1 text-xs text-muted">
+              <span className="rounded-full bg-background px-2 py-0.5">{kindLabel}</span>
+              {entry.due_on && (
+                <span className="rounded-full bg-background px-2 py-0.5 text-foreground">
+                  {formatDay(entry.due_on)}
+                </span>
+              )}
               {entry.tags.map((tag) => (
-                <li
-                  key={tag}
-                  className="rounded-full bg-background px-2 py-0.5 text-xs text-muted"
-                >
+                <span key={tag} className="rounded-full bg-background px-2 py-0.5">
                   #{tag}
-                </li>
+                </span>
               ))}
-            </ul>
+            </div>
           )}
 
           <div className="mt-2 flex items-center gap-3 text-xs text-muted">
-            <span>{kindLabel}</span>
             <span>{formatStamp(entry.created_at)}</span>
             {!editing && (
               <>

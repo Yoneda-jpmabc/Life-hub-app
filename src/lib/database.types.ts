@@ -21,7 +21,7 @@ export type Database = {
           created_at: string
           done: boolean
           done_at: string | null
-          due_at: string | null
+          due_on: string | null
           id: string
           kind: string
           tags: string[]
@@ -34,7 +34,7 @@ export type Database = {
           created_at?: string
           done?: boolean
           done_at?: string | null
-          due_at?: string | null
+          due_on?: string | null
           id?: string
           kind?: string
           tags?: string[]
@@ -47,7 +47,7 @@ export type Database = {
           created_at?: string
           done?: boolean
           done_at?: string | null
-          due_at?: string | null
+          due_on?: string | null
           id?: string
           kind?: string
           tags?: string[]

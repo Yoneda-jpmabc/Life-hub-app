@@ -1,23 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { Composer } from "@/components/composer";
-import { EntryItem } from "@/components/entry-item";
+import { CalendarView } from "@/components/calendar-view";
+import { Composer, type Draft } from "@/components/composer";
+import { EntryItem, type EntryPatch } from "@/components/entry-item";
 import { clearCache, readCache, writeCache } from "@/lib/entry-cache";
-import {
-  ENTRY_KINDS,
-  KIND_LABELS,
-  extractTags,
-  type Entry,
-  type EntryKind,
-} from "@/lib/entries";
+import { ENTRY_KINDS, KIND_LABELS, collectTags, type Entry, type EntryKind } from "@/lib/entries";
 import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
 
-type View = EntryKind | "all";
+type View = EntryKind | "all" | "calendar";
 
 export function HomeScreen() {
   const router = useRouter();
@@ -88,18 +83,18 @@ export function HomeScreen() {
     }
   }
 
-  function handleCreate(body: string, kind: EntryKind) {
+  function handleCreate(draft: Draft) {
     const now = new Date().toISOString();
     const entry: Entry = {
       // id を手元で決めておくと、保存後に差し替える必要がない
       id: crypto.randomUUID(),
       user_id: userId,
-      kind,
-      body,
-      tags: extractTags(body),
+      kind: draft.kind,
+      body: draft.body,
+      tags: draft.tags,
       done: false,
       done_at: null,
-      due_at: null,
+      due_on: draft.dueOn,
       archived: false,
       created_at: now,
       updated_at: now,
@@ -111,6 +106,7 @@ export function HomeScreen() {
         kind: entry.kind,
         body: entry.body,
         tags: entry.tags,
+        due_on: entry.due_on,
         created_at: now,
       }),
     );
@@ -118,17 +114,16 @@ export function HomeScreen() {
 
   function handleToggle(id: string, done: boolean) {
     const next = entries.map((item) =>
-      item.id === id ? { ...item, done, done_at: done ? new Date().toISOString() : null } : item,
+      item.id === id
+        ? { ...item, done, done_at: done ? new Date().toISOString() : null }
+        : item,
     );
     void apply(next, async () => supabase.from("entries").update({ done }).eq("id", id));
   }
 
-  function handleUpdate(id: string, body: string) {
-    const tags = extractTags(body);
-    const next = entries.map((item) => (item.id === id ? { ...item, body, tags } : item));
-    void apply(next, async () =>
-      supabase.from("entries").update({ body, tags }).eq("id", id),
-    );
+  function handleUpdate(id: string, patch: EntryPatch) {
+    const next = entries.map((item) => (item.id === id ? { ...item, ...patch } : item));
+    void apply(next, async () => supabase.from("entries").update(patch).eq("id", id));
   }
 
   function handleDelete(id: string) {
@@ -149,14 +144,16 @@ export function HomeScreen() {
     router.replace("/login");
   }
 
+  const knownTags = useMemo(() => collectTags(entries), [entries]);
+
   // 絞り込みは手元のデータで完結するので通信が発生しない
-  const visible = entries.filter(
-    (item) => (view === "all" || item.kind === view) && (showDone || !item.done),
-  );
+  const undone = entries.filter((item) => showDone || !item.done);
+  const visible = undone.filter((item) => view === "all" || item.kind === view);
 
   const tabs: { key: View; label: string }[] = [
     { key: "all", label: "すべて" },
     ...ENTRY_KINDS.map((kind) => ({ key: kind as View, label: KIND_LABELS[kind] })),
+    { key: "calendar", label: "カレンダー" },
   ];
 
   return (
@@ -172,7 +169,7 @@ export function HomeScreen() {
         </button>
       </header>
 
-      <Composer onSubmit={handleCreate} error={error} />
+      <Composer onSubmit={handleCreate} knownTags={knownTags} error={error} />
 
       <nav className="mt-6 flex flex-wrap items-center gap-1">
         {tabs.map((tab) => (
@@ -199,7 +196,14 @@ export function HomeScreen() {
         </button>
       </nav>
 
-      {visible.length > 0 ? (
+      {view === "calendar" ? (
+        <CalendarView
+          entries={undone}
+          onToggle={handleToggle}
+          onUpdate={handleUpdate}
+          onDelete={handleDelete}
+        />
+      ) : visible.length > 0 ? (
         <ul className="mt-4 space-y-2">
           {visible.map((entry) => (
             <EntryItem
@@ -213,9 +217,7 @@ export function HomeScreen() {
         </ul>
       ) : (
         <p className="mt-10 text-center text-sm text-muted">
-          {ready
-            ? "まだ何もない。上の欄に思いついたことから書いてみて。"
-            : "読み込み中…"}
+          {ready ? "まだ何もない。上の欄に思いついたことから書いてみて。" : "読み込み中…"}
         </p>
       )}
     </main>
