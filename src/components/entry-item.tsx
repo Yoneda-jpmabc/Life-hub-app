@@ -2,11 +2,22 @@
 
 import { useState } from "react";
 
-import { deleteEntry, toggleDone, updateBody } from "@/app/actions";
 import { KIND_LABELS, isEntryKind, type Entry } from "@/lib/entries";
 import { formatStamp } from "@/lib/format";
 
-export function EntryItem({ entry }: { entry: Entry }) {
+type Handler = (formData: FormData) => Promise<void>;
+
+export function EntryItem({
+  entry,
+  onToggle,
+  onUpdate,
+  onDelete,
+}: {
+  entry: Entry;
+  onToggle: Handler;
+  onUpdate: Handler;
+  onDelete: Handler;
+}) {
   const [editing, setEditing] = useState(false);
   const kindLabel = isEntryKind(entry.kind) ? KIND_LABELS[entry.kind] : entry.kind;
 
@@ -14,7 +25,7 @@ export function EntryItem({ entry }: { entry: Entry }) {
     <li className="rounded-2xl border border-border bg-surface p-3">
       <div className="flex items-start gap-3">
         {entry.kind === "task" && (
-          <form action={toggleDone} className="pt-0.5">
+          <form action={onToggle} className="pt-0.5">
             <input type="hidden" name="id" value={entry.id} />
             <input type="hidden" name="done" value={String(!entry.done)} />
             <button
@@ -34,8 +45,10 @@ export function EntryItem({ entry }: { entry: Entry }) {
         <div className="min-w-0 flex-1">
           {editing ? (
             <form
-              action={updateBody}
-              onSubmit={() => setEditing(false)}
+              action={async (formData) => {
+                setEditing(false);
+                await onUpdate(formData);
+              }}
               className="space-y-2"
             >
               <input type="hidden" name="id" value={entry.id} />
@@ -100,7 +113,7 @@ export function EntryItem({ entry }: { entry: Entry }) {
                   編集
                 </button>
                 <form
-                  action={deleteEntry}
+                  action={onDelete}
                   onSubmit={(event) => {
                     if (!window.confirm("これを削除する？")) event.preventDefault();
                   }}

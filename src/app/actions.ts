@@ -8,30 +8,30 @@ import { createClient } from "@/lib/supabase/server";
 
 export type ActionResult = { error: string | null };
 
+/**
+ * getClaims は JWKS で署名をその場で検証するので、getUser と違って
+ * 認証サーバーへの往復が発生しない。回線が細いほど効いてくる。
+ */
 async function requireUser() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data } = await supabase.auth.getClaims();
+  const userId = data?.claims.sub;
 
-  if (!user) redirect("/login");
+  if (!userId) redirect("/login");
 
-  return { supabase, user };
+  return { supabase, userId };
 }
 
-export async function createEntry(
-  _prev: ActionResult,
-  formData: FormData,
-): Promise<ActionResult> {
+export async function createEntry(formData: FormData): Promise<ActionResult> {
   const body = String(formData.get("body") ?? "").trim();
   if (!body) return { error: "何か書いてから保存してな" };
 
   const kindValue = formData.get("kind");
   const kind = isEntryKind(kindValue) ? kindValue : "note";
 
-  const { supabase, user } = await requireUser();
+  const { supabase, userId } = await requireUser();
   const { error } = await supabase.from("entries").insert({
-    user_id: user.id,
+    user_id: userId,
     kind,
     body,
     tags: extractTags(body),

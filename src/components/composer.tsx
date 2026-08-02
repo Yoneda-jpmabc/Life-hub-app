@@ -1,12 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
-import { useFormStatus } from "react-dom";
+import { useState } from "react";
 
-import { createEntry, type ActionResult } from "@/app/actions";
 import { ENTRY_KINDS, KIND_LABELS, type EntryKind } from "@/lib/entries";
-
-const INITIAL: ActionResult = { error: null };
 
 const PLACEHOLDERS: Record<EntryKind, string> = {
   thought: "いま考えてることを、まとまってなくても",
@@ -14,34 +10,26 @@ const PLACEHOLDERS: Record<EntryKind, string> = {
   task: "やること。あとでチェックを付けられる",
 };
 
-function SubmitButton() {
-  const { pending } = useFormStatus();
-
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-contrast transition-opacity disabled:opacity-50"
-    >
-      {pending ? "保存中…" : "保存"}
-    </button>
-  );
-}
-
-export function Composer() {
+export function Composer({
+  action,
+  error,
+}: {
+  action: (formData: FormData) => Promise<void>;
+  error: string | null;
+}) {
   const [kind, setKind] = useState<EntryKind>("note");
-  const [state, formAction] = useActionState(createEntry, INITIAL);
-  const formRef = useRef<HTMLFormElement>(null);
+  const [body, setBody] = useState("");
 
-  // 保存が通ったら入力欄を空にして、次をすぐ書ける状態に戻す
-  useEffect(() => {
-    if (!state.error) formRef.current?.reset();
-  }, [state]);
+  // formData は action 呼び出し前に確定しているので、
+  // ここで入力欄を空にしても送信内容には影響しない。
+  async function handle(formData: FormData) {
+    setBody("");
+    await action(formData);
+  }
 
   return (
     <form
-      ref={formRef}
-      action={formAction}
+      action={handle}
       className="rounded-2xl border border-border bg-surface p-3 shadow-sm"
     >
       <input type="hidden" name="kind" value={kind} />
@@ -67,6 +55,8 @@ export function Composer() {
       <textarea
         name="body"
         rows={3}
+        value={body}
+        onChange={(event) => setBody(event.target.value)}
         placeholder={PLACEHOLDERS[kind]}
         onKeyDown={(event) => {
           // スマホでは改行を邪魔せず、PC では Ctrl/⌘+Enter で素早く保存
@@ -78,10 +68,15 @@ export function Composer() {
       />
 
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-muted" role={state.error ? "alert" : undefined}>
-          {state.error ?? "#タグ を混ぜて書くと自動で拾う"}
+        <p className="text-xs text-muted" role={error ? "alert" : undefined}>
+          {error ?? "#タグ を混ぜて書くと自動で拾う"}
         </p>
-        <SubmitButton />
+        <button
+          type="submit"
+          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-contrast"
+        >
+          保存
+        </button>
       </div>
     </form>
   );

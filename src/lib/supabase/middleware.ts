@@ -28,9 +28,9 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // getClaims と getUser の間に処理を挟まないこと。
-  // ここでセッションを触らないとログアウト状態が正しく伝播しない。
-  await supabase.auth.getUser();
+  // ここでセッションに触れておかないと、期限切れの更新が走らない。
+  // getClaims は JWKS でその場で検証するため認証サーバーへの往復が要らない。
+  await supabase.auth.getClaims();
 
   return response;
 }
