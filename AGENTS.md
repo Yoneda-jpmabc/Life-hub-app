@@ -42,4 +42,10 @@ RLS で `auth.uid() = user_id` の行だけ読み書きできる。新しいテ�
 
 - スキーマを変えたら `supabase/migrations/` に SQL を残し、型定義を生成し直す
 - アイコンを変えたら `node scripts/generate-icons.mjs`
+- キャラクターの絵を変えたら `node scripts/generate-characters.mjs`
+
+見た目は差し替えられるようにしてある。キャラクターの絵は `art/characters/` の
+ファイルを置き換えるだけで済み、段階そのものは `src/lib/ranks.ts` の1枚から
+称号もキャラも引く。経験値の計算は見た目と切れているので、デザインを変えても
+数え方には影響しない。この分かれ方は保っておくこと。
 - `.env.local` は git 管理外。接続情報は `.env.example` を参照

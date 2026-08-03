@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 
+import { Character } from "@/components/character";
+import { CharacterSheet } from "@/components/character-sheet";
+import { rankChanged, rankFor } from "@/lib/ranks";
 import { readSeenLevel, writeSeenLevel } from "@/lib/xp-cache";
 import {
   MAX_LEVEL,
@@ -21,6 +24,7 @@ export function StatusBar({ status }: { status: XpStatus }) {
   const [seenLevel] = useState(() => readSeenLevel());
   const [dismissed, setDismissed] = useState<number | null>(null);
   const [open, setOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   // 一度上がったら、次に開いたときは知らせないよう控え直す
   useEffect(() => {
@@ -29,6 +33,10 @@ export function StatusBar({ status }: { status: XpStatus }) {
 
   const levelUp =
     seenLevel !== null && status.level > seenLevel && status.level !== dismissed;
+  // 姿が変わったときだけ、前と後を並べて見せる。
+  // レベルは上がったが同じ段階、という回のほうが多いので、そこは静かにしておく。
+  const grewUp = levelUp && seenLevel !== null && rankChanged(seenLevel, status.level);
+  const rank = rankFor(status.level);
 
   const maxed = status.level >= MAX_LEVEL;
   const filled = maxed ? 1 : status.need > 0 ? status.into / status.need : 0;
@@ -39,24 +47,52 @@ export function StatusBar({ status }: { status: XpStatus }) {
       {levelUp && (
         <div
           role="status"
-          className="mb-3 flex items-center justify-between gap-2 rounded-xl bg-accent px-3 py-2 text-sm font-medium text-accent-contrast"
+          className="mb-3 rounded-xl bg-accent px-3 py-2 text-accent-contrast"
         >
-          <span>レベルが {status.level} に あがった！ {status.title} になった。</span>
-          <button
-            type="button"
-            onClick={() => setDismissed(status.level)}
-            aria-label="閉じる"
-            className="text-xs opacity-70"
-          >
-            ✕
-          </button>
+          <div className="flex items-center justify-between gap-2 text-sm font-medium">
+            <span>
+              レベルが {status.level} に あがった！
+              {grewUp && ` ${status.title} になった。`}
+            </span>
+            <button
+              type="button"
+              onClick={() => setDismissed(status.level)}
+              aria-label="閉じる"
+              className="text-xs opacity-70"
+            >
+              ✕
+            </button>
+          </div>
+
+          {grewUp && seenLevel !== null && (
+            // 姿が変わった回だけ、前と後を並べる。
+            // 背景を敷いてあるのは、絵の色が帯の色と近くても沈まんようにするため。
+            // これが無いと「緑系の絵は描けない」という制約が絵の側に回ってしまう。
+            <div className="mt-2 flex items-center justify-center gap-3 rounded-lg bg-surface p-2">
+              <Character rank={rankFor(seenLevel)} size="large" box={72} className="opacity-40" />
+              <span aria-hidden="true" className="text-lg text-muted">
+                →
+              </span>
+              <Character rank={rank} size="large" box={112} />
+            </div>
+          )}
         </div>
       )}
 
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-semibold tabular-nums">Lv.{status.level}</span>
-          <span className="text-sm text-muted">{status.title}</span>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setSheetOpen(true)}
+            aria-label={`${status.title}。これまでの姿を見る`}
+            className="rounded-xl transition-opacity hover:opacity-80"
+          >
+            <Character rank={rank} size="small" box={48} />
+          </button>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-semibold tabular-nums">Lv.{status.level}</span>
+            <span className="text-sm text-muted">{status.title}</span>
+          </div>
         </div>
         <span className="text-xs text-muted tabular-nums">
           {status.total.toLocaleString("ja-JP")} XP
@@ -127,6 +163,10 @@ export function StatusBar({ status }: { status: XpStatus }) {
             {nextStep > 0 && ` あと${nextStep}日つづけたら倍率が上がる。`}
           </p>
         </dl>
+      )}
+
+      {sheetOpen && (
+        <CharacterSheet level={status.level} onClose={() => setSheetOpen(false)} />
       )}
     </section>
   );

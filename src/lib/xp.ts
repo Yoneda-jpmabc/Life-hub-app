@@ -1,5 +1,6 @@
 import { daysBetween, toDayKey, type DayKey } from "@/lib/date";
 import type { Entry } from "@/lib/entries";
+import { rankFor } from "@/lib/ranks";
 
 /**
  * 経験値は保存せず、entries から毎回組み立てる。
@@ -58,22 +59,8 @@ export function levelFor(total: number): LevelState {
 }
 
 /** レベルの節目に付く呼び名。数字だけやと、上がった実感が出ない。 */
-const TITLES: { from: number; name: string }[] = [
-  { from: 99, name: "勇者" },
-  { from: 80, name: "伝説" },
-  { from: 60, name: "英雄" },
-  { from: 45, name: "賢者" },
-  { from: 30, name: "達人" },
-  { from: 20, name: "熟練者" },
-  { from: 15, name: "一人前" },
-  { from: 10, name: "ベテラン" },
-  { from: 5, name: "せんし" },
-  { from: 3, name: "みならい" },
-  { from: 1, name: "たびびと" },
-];
-
 export function titleFor(level: number): string {
-  return TITLES.find((entry) => level >= entry.from)?.name ?? "たびびと";
+  return rankFor(level).name;
 }
 
 // ---- 連続日数 ----
