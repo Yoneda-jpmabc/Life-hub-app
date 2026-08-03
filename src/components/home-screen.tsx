@@ -30,6 +30,8 @@ export function HomeScreen() {
   const [view, setView] = useState<View>("all");
   const [mode, setMode] = useState<Mode>("list");
   const [showDone, setShowDone] = useState(false);
+  /** 絞り込みに使っているタグ。空なら絞り込まない */
+  const [picked, setPicked] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   /** 一覧を保持し、同じ内容を端末にも控える。 */
@@ -208,6 +210,13 @@ export function HomeScreen() {
 
   const knownTags = useMemo(() => collectTags(entries), [entries]);
 
+  /** 押されたタグを絞り込みに足す・外す。 */
+  function toggleTag(tag: string) {
+    setPicked((current) =>
+      current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag],
+    );
+  }
+
   // 経験値は保存せず、手元の記録から毎回組み立てる。
   // 貯めてある日ごとの分と重ねてから数えるので、古い記録が窓から外れても目減りしない。
   const merged = useMemo(() => mergeDays(storedDays, collectDays(entries)), [storedDays, entries]);
@@ -221,9 +230,17 @@ export function HomeScreen() {
   const undone = entries.filter((item) => showDone || !item.done);
   // 勤務は毎日1件ずつ増えるので「すべて」には混ぜない。書いたものが押し流されてしまう。
   // 記録できたかどうかは上のレベル表示がその場で動くので、そちらで分かる。
-  const visible = undone.filter((item) =>
+  const byKind = undone.filter((item) =>
     view === "all" ? item.kind !== "work" : item.kind === view,
   );
+  // タグは重ねるほど狭くなる。複数選んだら、その全部が付いているものだけ残す
+  const visible = byKind.filter((item) => picked.every((tag) => item.tags.includes(tag)));
+
+  // 出す候補は、いま見ている種類の中にあるタグだけ。
+  // 選んでも何も出てこないタグを並べても、選ぶ手がかりにならない。
+  // ただし選んである分は必ず残す。種類を切り替えた拍子に候補から消えると、
+  // 絞り込みが効いたまま外す手立てがなくなってしまう。
+  const tagChoices = [...new Set([...picked, ...collectTags(byKind)])];
 
   const tabs: { key: View; label: string }[] = [
     { key: "all", label: "すべて" },
@@ -298,6 +315,38 @@ export function HomeScreen() {
             </button>
           </nav>
 
+          {tagChoices.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1">
+              {tagChoices.map((tag) => {
+                const on = picked.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => toggleTag(tag)}
+                    aria-pressed={on}
+                    className={
+                      on
+                        ? "rounded-full bg-accent px-2 py-0.5 text-xs text-accent-contrast"
+                        : "rounded-full bg-surface px-2 py-0.5 text-xs text-muted ring-1 ring-border transition-colors hover:text-foreground"
+                    }
+                  >
+                    #{tag}
+                  </button>
+                );
+              })}
+              {picked.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPicked([])}
+                  className="ml-auto text-xs text-muted underline transition-colors hover:text-foreground"
+                >
+                  絞り込みを外す
+                </button>
+              )}
+            </div>
+          )}
+
           {visible.length > 0 ? (
             <ul className="mt-4 space-y-2">
               {visible.map((entry) => (
@@ -307,12 +356,18 @@ export function HomeScreen() {
                   onToggle={handleToggle}
                   onUpdate={handleUpdate}
                   onDelete={handleDelete}
+                  onTagClick={toggleTag}
+                  activeTags={picked}
                 />
               ))}
             </ul>
           ) : (
             <p className="mt-10 text-center text-sm text-muted">
-              {ready ? "まだ何もない。上の欄に思いついたことから書いてみて。" : "読み込み中…"}
+              {!ready
+                ? "読み込み中…"
+                : picked.length > 0
+                  ? "この絞り込みに当たるものがない。"
+                  : "まだ何もない。上の欄に思いついたことから書いてみて。"}
             </p>
           )}
         </>

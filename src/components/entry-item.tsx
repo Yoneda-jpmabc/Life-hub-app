@@ -20,11 +20,17 @@ export function EntryItem({
   onToggle,
   onUpdate,
   onDelete,
+  onTagClick,
+  activeTags = [],
 }: {
   entry: Entry;
   onToggle: (id: string, done: boolean) => void;
   onUpdate: (id: string, patch: EntryPatch) => void;
   onDelete: (id: string) => void;
+  /** タグを押して絞り込む。渡さなければタグはただの表示 */
+  onTagClick?: (tag: string) => void;
+  /** いま絞り込みに使われているタグ */
+  activeTags?: string[];
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(entry.body);
@@ -162,11 +168,28 @@ export function EntryItem({
                   {formatDay(entry.due_on)}
                 </span>
               )}
-              {entry.tags.map((tag) => (
-                <span key={tag} className="rounded-full bg-background px-2 py-0.5">
-                  #{tag}
-                </span>
-              ))}
+              {entry.tags.map((tag) =>
+                // 目に入ったタグをそのまま押せるほうが、上の一覧まで戻るより早い
+                onTagClick ? (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => onTagClick(tag)}
+                    aria-pressed={activeTags.includes(tag)}
+                    className={
+                      activeTags.includes(tag)
+                        ? "rounded-full bg-accent px-2 py-0.5 text-accent-contrast"
+                        : "rounded-full bg-background px-2 py-0.5 transition-colors hover:text-foreground"
+                    }
+                  >
+                    #{tag}
+                  </button>
+                ) : (
+                  <span key={tag} className="rounded-full bg-background px-2 py-0.5">
+                    #{tag}
+                  </span>
+                ),
+              )}
             </div>
           )}
 
