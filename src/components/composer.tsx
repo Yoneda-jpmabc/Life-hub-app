@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { MinutesField } from "@/components/minutes-field";
 import { todayKey } from "@/lib/date";
 import {
   DATEABLE_KINDS,
@@ -15,6 +16,7 @@ const PLACEHOLDERS: Record<EntryKind, string> = {
   thought: "いま考えてることを、まとまってなくても",
   note: "覚えておきたいこと",
   task: "やること",
+  work: "その日のこと(書かんでもええ)",
 };
 
 export type Draft = {
@@ -22,7 +24,12 @@ export type Draft = {
   kind: EntryKind;
   tags: string[];
   dueOn: string | null;
+  /** 勤務のときだけ入る。はたらいた分。 */
+  minutes: number | null;
 };
+
+/** 記録がなければ、まずは定時から。 */
+const DEFAULT_MINUTES = 8 * 60;
 
 export function Composer({
   onSubmit,
@@ -37,12 +44,16 @@ export function Composer({
   const [text, setText] = useState("");
   const [picked, setPicked] = useState<string[]>([]);
   const [dueOn, setDueOn] = useState("");
+  const [minutes, setMinutes] = useState(DEFAULT_MINUTES);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const isWork = kind === "work";
   const canHaveDate = DATEABLE_KINDS.includes(kind);
   // 本文に直接書いた #タグ と、下から選んだタグを合わせて扱う
   const typed = parseTags(text).tags;
   const tags = [...new Set([...typed, ...picked])];
+  // 勤務は「いつの分か」がないと置き場所が決まらないので、既定で今日にしておく
+  const workDay = dueOn || todayKey();
 
   function toggleTag(tag: string) {
     setPicked((current) =>
@@ -52,7 +63,9 @@ export function Composer({
 
   function submit() {
     const parsed = parseTags(text);
-    if (!parsed.body) {
+
+    // 勤務は時間そのものが中身なので、本文がなくても記録できる
+    if (!isWork && !parsed.body) {
       setNotice(
         text.trim() ? "本文も書いてな。タグだけやと保存できひん。" : "何か書いてから保存してな",
       );
@@ -64,12 +77,14 @@ export function Composer({
       body: parsed.body,
       kind,
       tags,
-      dueOn: canHaveDate && dueOn ? dueOn : null,
+      dueOn: isWork ? workDay : canHaveDate && dueOn ? dueOn : null,
+      minutes: isWork ? minutes : null,
     });
 
     setText("");
     setPicked([]);
     setDueOn("");
+    setMinutes(DEFAULT_MINUTES);
   }
 
   const suggestions = knownTags.filter((tag) => !typed.includes(tag)).slice(0, 12);
@@ -100,8 +115,33 @@ export function Composer({
         ))}
       </div>
 
+      {isWork && (
+        // 勤務は時間が主役なので、本文より先に置く
+        <div className="mb-3 px-1">
+          <div className="mb-2 flex items-center gap-2">
+            <input
+              type="date"
+              value={workDay}
+              onChange={(event) => setDueOn(event.target.value)}
+              aria-label="いつの分か"
+              className="rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground outline-none"
+            />
+            {workDay !== todayKey() && (
+              <button
+                type="button"
+                onClick={() => setDueOn("")}
+                className="text-xs text-muted underline"
+              >
+                今日に戻す
+              </button>
+            )}
+          </div>
+          <MinutesField minutes={minutes} onChange={setMinutes} />
+        </div>
+      )}
+
       <textarea
-        rows={3}
+        rows={isWork ? 2 : 3}
         value={text}
         onChange={(event) => setText(event.target.value)}
         placeholder={PLACEHOLDERS[kind]}
@@ -115,7 +155,7 @@ export function Composer({
         className="w-full resize-none bg-transparent px-1 text-base outline-none placeholder:text-muted"
       />
 
-      {canHaveDate && (
+      {canHaveDate && !isWork && (
         <div className="mt-1 flex items-center gap-2 px-1">
           <input
             type="date"
@@ -144,7 +184,8 @@ export function Composer({
         </div>
       )}
 
-      {(tags.length > 0 || suggestions.length > 0) && (
+      {/* 勤務はタグで分ける対象やないので、候補も出さない */}
+      {!isWork && (tags.length > 0 || suggestions.length > 0) && (
         <div className="mt-2 flex flex-wrap gap-1 px-1">
           {suggestions.map((tag) => {
             const on = picked.includes(tag);
@@ -177,7 +218,11 @@ export function Composer({
 
       <div className="mt-2 flex items-center justify-between gap-3">
         <p className="text-xs text-muted" role={notice ?? error ? "alert" : undefined}>
-          {notice ?? error ?? "#タグ と書くと本文から外して属性にする"}
+          {notice ??
+            error ??
+            (isWork
+              ? "同じ日をもう一度記録したら時間が入れ替わる"
+              : "#タグ と書くと本文から外して属性にする")}
         </p>
         <button
           type="submit"

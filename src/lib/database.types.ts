@@ -24,19 +24,21 @@ export type Database = {
           due_on: string | null
           id: string
           kind: string
+          minutes: number | null
           tags: string[]
           updated_at: string
           user_id: string
         }
         Insert: {
           archived?: boolean
-          body: string
+          body?: string
           created_at?: string
           done?: boolean
           done_at?: string | null
           due_on?: string | null
           id?: string
           kind?: string
+          minutes?: number | null
           tags?: string[]
           updated_at?: string
           user_id?: string
@@ -50,6 +52,7 @@ export type Database = {
           due_on?: string | null
           id?: string
           kind?: string
+          minutes?: number | null
           tags?: string[]
           updated_at?: string
           user_id?: string

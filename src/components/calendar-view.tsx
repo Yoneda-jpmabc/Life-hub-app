@@ -3,16 +3,28 @@
 import { useMemo, useState } from "react";
 
 import { EntryItem, type EntryPatch } from "@/components/entry-item";
-import { WEEKDAY_LABELS, formatDay, formatMonth, monthGrid, toDayKey, todayKey } from "@/lib/date";
+import {
+  WEEKDAY_LABELS,
+  formatDay,
+  formatMonth,
+  monthGrid,
+  toDayKey,
+  todayKey,
+  type DayKey,
+} from "@/lib/date";
 import type { Entry } from "@/lib/entries";
+import { formatMinutes, type DayResult } from "@/lib/xp";
 
 export function CalendarView({
   entries,
+  days: xpDays,
   onToggle,
   onUpdate,
   onDelete,
 }: {
   entries: Entry[];
+  /** 日ごとに入った経験値。升目に数字を出すのに使う */
+  days: Map<DayKey, DayResult>;
   onToggle: (id: string, done: boolean) => void;
   onUpdate: (id: string, patch: EntryPatch) => void;
   onDelete: (id: string) => void;
@@ -37,6 +49,7 @@ export function CalendarView({
 
   const days = useMemo(() => monthGrid(cursor.year, cursor.month), [cursor]);
   const selectedEntries = selected ? (byDay.get(selected) ?? []) : [];
+  const selectedXp = selected ? xpDays.get(selected) : undefined;
 
   function shift(step: number) {
     setCursor((current) => {
@@ -80,6 +93,7 @@ export function CalendarView({
           const key = toDayKey(date);
           const outside = date.getMonth() !== cursor.month;
           const count = byDay.get(key)?.length ?? 0;
+          const gained = xpDays.get(key);
           const isToday = key === today;
           const isSelected = key === selected;
 
@@ -97,16 +111,28 @@ export function CalendarView({
               ].join(" ")}
             >
               <span>{date.getDate()}</span>
-              <span
-                className={[
-                  "mt-0.5 h-1 w-1 rounded-full",
-                  count > 0
-                    ? isSelected
-                      ? "bg-accent-contrast"
-                      : "bg-accent"
-                    : "bg-transparent",
-                ].join(" ")}
-              />
+              {/* 入った経験値をそのまま出す。数字が並ぶと、動いた日が一目で分かる */}
+              {gained ? (
+                <span
+                  className={[
+                    "text-[10px] leading-tight tabular-nums",
+                    isSelected ? "text-accent-contrast" : "text-accent",
+                  ].join(" ")}
+                >
+                  {gained.total}
+                </span>
+              ) : (
+                <span
+                  className={[
+                    "mt-0.5 h-1 w-1 rounded-full",
+                    count > 0
+                      ? isSelected
+                        ? "bg-accent-contrast"
+                        : "bg-muted"
+                      : "bg-transparent",
+                  ].join(" ")}
+                />
+              )}
             </button>
           );
         })}
@@ -114,7 +140,17 @@ export function CalendarView({
 
       {selected && (
         <div className="mt-5">
-          <p className="mb-2 text-sm font-medium">{formatDay(selected)}</p>
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <p className="text-sm font-medium">{formatDay(selected)}</p>
+            {selectedXp && (
+              <p className="text-xs text-muted tabular-nums">
+                {selectedXp.tasks > 0 && `タスク${selectedXp.tasks}件 `}
+                {selectedXp.minutes > 0 && `${formatMinutes(selectedXp.minutes)} `}
+                <span className="font-medium text-accent">+{selectedXp.total} XP</span>
+                {selectedXp.multiplier > 1 && ` (×${selectedXp.multiplier})`}
+              </p>
+            )}
+          </div>
           {selectedEntries.length > 0 ? (
             <ul className="space-y-2">
               {selectedEntries.map((entry) => (

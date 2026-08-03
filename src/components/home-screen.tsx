@@ -6,9 +6,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarView } from "@/components/calendar-view";
 import { Composer, type Draft } from "@/components/composer";
 import { EntryItem, type EntryPatch } from "@/components/entry-item";
+import { StatusBar } from "@/components/status-bar";
+import { todayKey } from "@/lib/date";
 import { clearCache, readCache, writeCache } from "@/lib/entry-cache";
 import { ENTRY_KINDS, KIND_LABELS, collectTags, type Entry, type EntryKind } from "@/lib/entries";
 import { createClient } from "@/lib/supabase/client";
+import { buildStatus, collectDays } from "@/lib/xp";
+import { clearXpCache, mergeDays, readDays, writeDays } from "@/lib/xp-cache";
 
 const supabase = createClient();
 
@@ -19,6 +23,8 @@ type Mode = "list" | "calendar";
 export function HomeScreen() {
   const router = useRouter();
   const [entries, setEntries] = useState<Entry[]>(() => readCache() ?? []);
+  // 端末に貯めてある日ごとの経験値。読み込みの窓から外れた古い分をここで支える
+  const [storedDays] = useState(() => readDays());
   const [ready, setReady] = useState(false);
   const [userId, setUserId] = useState("");
   const [view, setView] = useState<View>("all");
@@ -87,6 +93,11 @@ export function HomeScreen() {
   }
 
   function handleCreate(draft: Draft) {
+    if (draft.kind === "work" && draft.dueOn) {
+      handleWorkLog(draft.dueOn, draft.minutes ?? 0, draft.body);
+      return;
+    }
+
     const now = new Date().toISOString();
     const entry: Entry = {
       // id を手元で決めておくと、保存後に差し替える必要がない
@@ -98,6 +109,7 @@ export function HomeScreen() {
       done: false,
       done_at: null,
       due_on: draft.dueOn,
+      minutes: null,
       archived: false,
       created_at: now,
       updated_at: now,
@@ -110,6 +122,52 @@ export function HomeScreen() {
         body: entry.body,
         tags: entry.tags,
         due_on: entry.due_on,
+        created_at: now,
+      }),
+    );
+  }
+
+  /**
+   * 勤務は1日1件。同じ日をもう一度記録したら、新しく作らずに時間を差し替える。
+   * 添え書きは空で出されたときだけ前のものを残す。消したいときは編集から消せる。
+   */
+  function handleWorkLog(day: string, minutes: number, memo: string) {
+    const existing = entries.find((item) => item.kind === "work" && item.due_on === day);
+
+    if (existing) {
+      const body = memo || existing.body;
+      const next = entries.map((item) =>
+        item.id === existing.id ? { ...item, minutes, body } : item,
+      );
+      void apply(next, async () =>
+        supabase.from("entries").update({ minutes, body }).eq("id", existing.id),
+      );
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const entry: Entry = {
+      id: crypto.randomUUID(),
+      user_id: userId,
+      kind: "work",
+      body: memo,
+      tags: [],
+      done: false,
+      done_at: null,
+      due_on: day,
+      minutes,
+      archived: false,
+      created_at: now,
+      updated_at: now,
+    };
+
+    void apply([entry, ...entries], async () =>
+      supabase.from("entries").insert({
+        id: entry.id,
+        kind: entry.kind,
+        body: entry.body,
+        due_on: entry.due_on,
+        minutes: entry.minutes,
         created_at: now,
       }),
     );
@@ -144,14 +202,28 @@ export function HomeScreen() {
     }
     await supabase.auth.signOut();
     clearCache();
+    clearXpCache();
     router.replace("/login");
   }
 
   const knownTags = useMemo(() => collectTags(entries), [entries]);
 
+  // 経験値は保存せず、手元の記録から毎回組み立てる。
+  // 貯めてある日ごとの分と重ねてから数えるので、古い記録が窓から外れても目減りしない。
+  const merged = useMemo(() => mergeDays(storedDays, collectDays(entries)), [storedDays, entries]);
+  const status = useMemo(() => buildStatus(merged, todayKey()), [merged]);
+
+  useEffect(() => {
+    writeDays(merged);
+  }, [merged]);
+
   // 絞り込みは手元のデータで完結するので通信が発生しない
   const undone = entries.filter((item) => showDone || !item.done);
-  const visible = undone.filter((item) => view === "all" || item.kind === view);
+  // 勤務は毎日1件ずつ増えるので「すべて」には混ぜない。書いたものが押し流されてしまう。
+  // 記録できたかどうかは上のレベル表示がその場で動くので、そちらで分かる。
+  const visible = undone.filter((item) =>
+    view === "all" ? item.kind !== "work" : item.kind === view,
+  );
 
   const tabs: { key: View; label: string }[] = [
     { key: "all", label: "すべて" },
@@ -184,11 +256,15 @@ export function HomeScreen() {
         </div>
       </header>
 
+      {/* レベルはどの見方でも見えるようにしておく */}
+      <StatusBar status={status} />
+
       {mode === "calendar" ? (
         // カレンダーは入力欄を挟まず画面の先頭に置く。
         // 日を選んだときに、その日の中身がそのまま下に続いて見えるようにするため。
         <CalendarView
           entries={undone}
+          days={status.days}
           onToggle={handleToggle}
           onUpdate={handleUpdate}
           onDelete={handleDelete}

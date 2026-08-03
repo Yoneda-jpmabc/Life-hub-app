@@ -2,18 +2,24 @@ import type { Tables } from "@/lib/database.types";
 
 export type Entry = Tables<"entries">;
 
-/** 入力を受け止める3つの器。すべて同じ entries テーブルに入る。 */
-export const ENTRY_KINDS = ["thought", "note", "task"] as const;
+/** 入力を受け止める器。すべて同じ entries テーブルに入る。 */
+export const ENTRY_KINDS = ["thought", "note", "task", "work"] as const;
 export type EntryKind = (typeof ENTRY_KINDS)[number];
 
 export const KIND_LABELS: Record<EntryKind, string> = {
   thought: "思考",
   note: "メモ",
   task: "タスク",
+  work: "勤務",
 };
 
-/** 日付を持てるのはメモとタスクだけ。思考は書き殴る場所なので何も要求しない。 */
-export const DATEABLE_KINDS: EntryKind[] = ["note", "task"];
+/** 日付を持てるのはこの3つ。思考は書き殴る場所なので何も要求しない。 */
+export const DATEABLE_KINDS: EntryKind[] = ["note", "task", "work"];
+
+/** 勤務だけは本文ではなく時間を記録するので、入力の作りが他と違う。 */
+export function isWorkLog(entry: Entry): boolean {
+  return entry.kind === "work";
+}
 
 export function isEntryKind(value: unknown): value is EntryKind {
   return ENTRY_KINDS.includes(value as EntryKind);

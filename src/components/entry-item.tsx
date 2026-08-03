@@ -2,11 +2,18 @@
 
 import { useState } from "react";
 
+import { MinutesField } from "@/components/minutes-field";
 import { formatDay } from "@/lib/date";
 import { DATEABLE_KINDS, KIND_LABELS, isEntryKind, parseTags, type Entry } from "@/lib/entries";
 import { formatStamp } from "@/lib/format";
+import { formatMinutes, taskXp, workXp } from "@/lib/xp";
 
-export type EntryPatch = { body: string; tags: string[]; due_on: string | null };
+export type EntryPatch = {
+  body: string;
+  tags: string[];
+  due_on: string | null;
+  minutes?: number | null;
+};
 
 export function EntryItem({
   entry,
@@ -22,27 +29,39 @@ export function EntryItem({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(entry.body);
   const [dueOn, setDueOn] = useState(entry.due_on ?? "");
+  const [minutes, setMinutes] = useState(entry.minutes ?? 0);
 
+  const isWork = entry.kind === "work";
   const kindLabel = isEntryKind(entry.kind) ? KIND_LABELS[entry.kind] : entry.kind;
   const canHaveDate = isEntryKind(entry.kind) && DATEABLE_KINDS.includes(entry.kind);
+  // 経験値が入った記録にだけ、入った分を添える
+  const earned = isWork ? workXp(entry.minutes ?? 0) : taskXp(entry);
 
   function save() {
     setEditing(false);
     const parsed = parseTags(draft);
-    if (!parsed.body) return;
+    // 勤務は時間そのものが中身なので、本文が空でも保存できる
+    if (!isWork && !parsed.body) return;
 
     // 編集中に書き足した #タグ も拾い、元から付いていたものと合わせる
     const tags = [...new Set([...entry.tags, ...parsed.tags])];
-    const nextDue = canHaveDate && dueOn ? dueOn : null;
+    // 勤務はどの日の分か分からんようになると置き場所を失うので、空にはさせない
+    const nextDue = isWork ? (dueOn || entry.due_on) : canHaveDate && dueOn ? dueOn : null;
 
     if (
       parsed.body === entry.body &&
       nextDue === entry.due_on &&
-      tags.length === entry.tags.length
+      tags.length === entry.tags.length &&
+      (!isWork || minutes === entry.minutes)
     ) {
       return;
     }
-    onUpdate(entry.id, { body: parsed.body, tags, due_on: nextDue });
+    onUpdate(entry.id, {
+      body: parsed.body,
+      tags,
+      due_on: nextDue,
+      ...(isWork ? { minutes } : {}),
+    });
   }
 
   return (
@@ -66,12 +85,14 @@ export function EntryItem({
         <div className="min-w-0 flex-1">
           {editing ? (
             <div className="space-y-2">
+              {isWork && <MinutesField minutes={minutes} onChange={setMinutes} />}
               <textarea
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                rows={3}
-                autoFocus
-                className="w-full resize-none rounded-lg border border-border bg-background p-2 text-base outline-none"
+                rows={isWork ? 2 : 3}
+                autoFocus={!isWork}
+                placeholder={isWork ? "その日のこと(書かんでもええ)" : undefined}
+                className="w-full resize-none rounded-lg border border-border bg-background p-2 text-base outline-none placeholder:text-muted"
               />
               {canHaveDate && (
                 <input
@@ -95,6 +116,7 @@ export function EntryItem({
                   onClick={() => {
                     setDraft(entry.body);
                     setDueOn(entry.due_on ?? "");
+                    setMinutes(entry.minutes ?? 0);
                     setEditing(false);
                   }}
                   className="rounded-lg px-3 py-1 text-xs text-muted"
@@ -102,6 +124,18 @@ export function EntryItem({
                   やめる
                 </button>
               </div>
+            </div>
+          ) : isWork ? (
+            // 勤務は時間が中身。本文は添え書きなので、あるときだけ下に出す
+            <div>
+              <p className="text-base font-medium tabular-nums">
+                {formatMinutes(entry.minutes ?? 0)}
+              </p>
+              {entry.body && (
+                <p className="mt-1 whitespace-pre-wrap break-words text-sm text-muted">
+                  {entry.body}
+                </p>
+              )}
             </div>
           ) : (
             <p
@@ -118,6 +152,11 @@ export function EntryItem({
           {!editing && (
             <div className="mt-2 flex flex-wrap items-center gap-1 text-xs text-muted">
               <span className="rounded-full bg-background px-2 py-0.5">{kindLabel}</span>
+              {earned > 0 && (
+                <span className="rounded-full bg-background px-2 py-0.5 font-medium text-accent tabular-nums">
+                  +{earned} XP
+                </span>
+              )}
               {entry.due_on && (
                 <span className="rounded-full bg-background px-2 py-0.5 text-foreground">
                   {formatDay(entry.due_on)}

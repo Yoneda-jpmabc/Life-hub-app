@@ -16,6 +16,17 @@ export function todayKey(): DayKey {
 }
 
 /**
+ * 2つの日の隔たりを日数で返す。
+ * 夏時間のある地域では1日が23時間や25時間になるので、UTC に置き直してから引く。
+ */
+export function daysBetween(from: DayKey, to: DayKey): number {
+  const [fy, fm, fd] = from.split("-").map(Number);
+  const [ty, tm, td] = to.split("-").map(Number);
+  const day = 24 * 60 * 60 * 1000;
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / day);
+}
+
+/**
  * その月の1日から末日までを、週の頭(日曜)で揃えた升目にする。
  * 週数はその月に必要な分だけ(5または6)。常に6週にすると、
  * 中身が他月だけの行ができて画面の高さを無駄に使う。
