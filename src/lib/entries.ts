@@ -54,8 +54,10 @@ export function parseTags(input: string): { body: string; tags: string[] } {
   return { body: lines.join("\n").trim(), tags: [...new Set(tags)] };
 }
 
-/** 使用回数の多い順に並べたタグ一覧。入力欄の候補に使う。 */
-export function collectTags(entries: Entry[]): string[] {
+export type TagCount = { tag: string; count: number };
+
+/** 使用回数の多い順に並べたタグと、その件数。 */
+export function countTags(entries: Entry[]): TagCount[] {
   const counts = new Map<string, number>();
   for (const entry of entries) {
     for (const tag of entry.tags) {
@@ -64,5 +66,16 @@ export function collectTags(entries: Entry[]): string[] {
   }
   return [...counts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ja"))
-    .map(([tag]) => tag);
+    .map(([tag, count]) => ({ tag, count }));
+}
+
+/** 使用回数の多い順に並べたタグ一覧。入力欄の候補に使う。 */
+export function collectTags(entries: Entry[]): string[] {
+  return countTags(entries).map(({ tag }) => tag);
+}
+
+/** 選んだタグが付いた記録だけを残す。タグ未選択なら素通し。 */
+export function filterByTag(entries: Entry[], tag: string | null): Entry[] {
+  if (!tag) return entries;
+  return entries.filter((entry) => entry.tags.includes(tag));
 }

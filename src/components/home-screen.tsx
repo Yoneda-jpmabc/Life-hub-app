@@ -7,9 +7,18 @@ import { CalendarView } from "@/components/calendar-view";
 import { Composer, type Draft } from "@/components/composer";
 import { EntryItem, type EntryPatch } from "@/components/entry-item";
 import { StatusBar } from "@/components/status-bar";
+import { TagFilter } from "@/components/tag-filter";
 import { todayKey } from "@/lib/date";
 import { clearCache, readCache, writeCache } from "@/lib/entry-cache";
-import { ENTRY_KINDS, KIND_LABELS, collectTags, type Entry, type EntryKind } from "@/lib/entries";
+import {
+  ENTRY_KINDS,
+  KIND_LABELS,
+  collectTags,
+  countTags,
+  filterByTag,
+  type Entry,
+  type EntryKind,
+} from "@/lib/entries";
 import { createClient } from "@/lib/supabase/client";
 import { buildStatus, collectDays } from "@/lib/xp";
 import { clearXpCache, mergeDays, readDays, writeDays } from "@/lib/xp-cache";
@@ -28,6 +37,8 @@ export function HomeScreen() {
   const [ready, setReady] = useState(false);
   const [userId, setUserId] = useState("");
   const [view, setView] = useState<View>("all");
+  /** 選んだタグ。null なら絞り込まない。 */
+  const [tag, setTag] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("list");
   const [showDone, setShowDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -221,9 +232,20 @@ export function HomeScreen() {
   const undone = entries.filter((item) => showDone || !item.done);
   // 勤務は毎日1件ずつ増えるので「すべて」には混ぜない。書いたものが押し流されてしまう。
   // 記録できたかどうかは上のレベル表示がその場で動くので、そちらで分かる。
-  const visible = undone.filter((item) =>
+  const inView = undone.filter((item) =>
     view === "all" ? item.kind !== "work" : item.kind === view,
   );
+
+  // 件数は「いま出ている範囲に何件あるか」を数える。押した先が空だと分からんようになる。
+  const tagCounts = countTags(inView);
+  // 種類を切り替えて0件になったタグも、選んでいる間は残す。
+  // 黙って外すと、なぜ表示が変わったのか分からんようになる。
+  const chips =
+    tag && !tagCounts.some((item) => item.tag === tag)
+      ? [{ tag, count: 0 }, ...tagCounts]
+      : tagCounts;
+
+  const visible = filterByTag(inView, tag);
 
   const tabs: { key: View; label: string }[] = [
     { key: "all", label: "すべて" },
@@ -298,6 +320,8 @@ export function HomeScreen() {
             </button>
           </nav>
 
+          <TagFilter tags={chips} selected={tag} onSelect={setTag} />
+
           {visible.length > 0 ? (
             <ul className="mt-4 space-y-2">
               {visible.map((entry) => (
@@ -307,12 +331,17 @@ export function HomeScreen() {
                   onToggle={handleToggle}
                   onUpdate={handleUpdate}
                   onDelete={handleDelete}
+                  onTagSelect={setTag}
                 />
               ))}
             </ul>
           ) : (
             <p className="mt-10 text-center text-sm text-muted">
-              {ready ? "まだ何もない。上の欄に思いついたことから書いてみて。" : "読み込み中…"}
+              {!ready
+                ? "読み込み中…"
+                : tag
+                  ? `#${tag} はここにはない。上のタグをもう一度押すと戻る。`
+                  : "まだ何もない。上の欄に思いついたことから書いてみて。"}
             </p>
           )}
         </>
