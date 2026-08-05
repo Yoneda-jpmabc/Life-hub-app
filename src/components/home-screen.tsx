@@ -20,6 +20,12 @@ type View = EntryKind | "all";
 /** 一覧とカレンダーは絞り込みではなく見方そのものが違うので、画面を分ける。 */
 type Mode = "list" | "calendar";
 
+/**
+ * タグの列に一度に出す数。これを超えた分は畳んでおく。
+ * 増えるにまかせると入力欄と一覧の間が伸びて、書いたものが下に押し出される。
+ */
+const TAG_LIMIT = 12;
+
 export function HomeScreen() {
   const router = useRouter();
   const [entries, setEntries] = useState<Entry[]>(() => readCache() ?? []);
@@ -30,6 +36,9 @@ export function HomeScreen() {
   const [view, setView] = useState<View>("all");
   const [mode, setMode] = useState<Mode>("list");
   const [showDone, setShowDone] = useState(false);
+  /** 選んでいるタグ。null は絞り込みなし。 */
+  const [tag, setTag] = useState<string | null>(null);
+  const [allTags, setAllTags] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   /** 一覧を保持し、同じ内容を端末にも控える。 */
@@ -114,6 +123,10 @@ export function HomeScreen() {
       created_at: now,
       updated_at: now,
     };
+
+    // 絞り込み中に、そのタグを付けずに書いたものが一覧から漏れてしまう。
+    // 書いた直後に消えたように見えるのが一番こたえるので、絞り込みのほうを外す。
+    if (tag && !draft.tags.includes(tag)) setTag(null);
 
     void apply([entry, ...entries], async () =>
       supabase.from("entries").insert({
@@ -221,9 +234,17 @@ export function HomeScreen() {
   const undone = entries.filter((item) => showDone || !item.done);
   // 勤務は毎日1件ずつ増えるので「すべて」には混ぜない。書いたものが押し流されてしまう。
   // 記録できたかどうかは上のレベル表示がその場で動くので、そちらで分かる。
-  const visible = undone.filter((item) =>
+  const scoped = undone.filter((item) =>
     view === "all" ? item.kind !== "work" : item.kind === view,
   );
+  const visible = tag ? scoped.filter((item) => item.tags.includes(tag)) : scoped;
+
+  // タグの候補は今見えている範囲から作る。ここに無いタグを選んでも中身が空になるだけ。
+  const scopedTags = collectTags(scoped);
+  // 選んでいるタグは必ず先頭に置く。畳んだときに隠れて外せんようになるのを防ぐ。
+  const tagOptions = tag ? [tag, ...scopedTags.filter((item) => item !== tag)] : scopedTags;
+  const foldable = tagOptions.length > TAG_LIMIT;
+  const shownTags = foldable && !allTags ? tagOptions.slice(0, TAG_LIMIT) : tagOptions;
 
   const tabs: { key: View; label: string }[] = [
     { key: "all", label: "すべて" },
@@ -298,6 +319,36 @@ export function HomeScreen() {
             </button>
           </nav>
 
+          {/* タグは種類と重ねて効かせる。「タスクの中の #仕事 だけ」が出せる */}
+          {tagOptions.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1">
+              {shownTags.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => setTag(tag === name ? null : name)}
+                  aria-pressed={tag === name}
+                  className={
+                    tag === name
+                      ? "rounded-full bg-accent px-2 py-0.5 text-xs text-accent-contrast"
+                      : "rounded-full bg-surface px-2 py-0.5 text-xs text-muted transition-colors hover:text-foreground"
+                  }
+                >
+                  #{name}
+                </button>
+              ))}
+              {foldable && (
+                <button
+                  type="button"
+                  onClick={() => setAllTags((value) => !value)}
+                  className="px-2 py-0.5 text-xs text-muted underline transition-colors hover:text-foreground"
+                >
+                  {allTags ? "たたむ" : `ほか${tagOptions.length - TAG_LIMIT}件`}
+                </button>
+              )}
+            </div>
+          )}
+
           {visible.length > 0 ? (
             <ul className="mt-4 space-y-2">
               {visible.map((entry) => (
@@ -307,12 +358,17 @@ export function HomeScreen() {
                   onToggle={handleToggle}
                   onUpdate={handleUpdate}
                   onDelete={handleDelete}
+                  onSelectTag={setTag}
                 />
               ))}
             </ul>
           ) : (
             <p className="mt-10 text-center text-sm text-muted">
-              {ready ? "まだ何もない。上の欄に思いついたことから書いてみて。" : "読み込み中…"}
+              {!ready
+                ? "読み込み中…"
+                : tag
+                  ? `#${tag} はこの中にはない。`
+                  : "まだ何もない。上の欄に思いついたことから書いてみて。"}
             </p>
           )}
         </>

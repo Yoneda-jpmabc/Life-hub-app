@@ -54,7 +54,11 @@ export function parseTags(input: string): { body: string; tags: string[] } {
   return { body: lines.join("\n").trim(), tags: [...new Set(tags)] };
 }
 
-/** 使用回数の多い順に並べたタグ一覧。入力欄の候補に使う。 */
+/**
+ * 使用回数の多い順に並べたタグ一覧。入力欄の候補と、一覧の絞り込みに使う。
+ *
+ * よく使うものほど前に来るので、並びの先頭だけ出しても普段使いのタグは拾える。
+ */
 export function collectTags(entries: Entry[]): string[] {
   const counts = new Map<string, number>();
   for (const entry of entries) {

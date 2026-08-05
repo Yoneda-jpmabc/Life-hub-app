@@ -20,11 +20,14 @@ export function EntryItem({
   onToggle,
   onUpdate,
   onDelete,
+  onSelectTag,
 }: {
   entry: Entry;
   onToggle: (id: string, done: boolean) => void;
   onUpdate: (id: string, patch: EntryPatch) => void;
   onDelete: (id: string) => void;
+  /** 渡すとタグを押して絞り込める。絞り込みの無い画面では省く。 */
+  onSelectTag?: (tag: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(entry.body);
@@ -162,11 +165,22 @@ export function EntryItem({
                   {formatDay(entry.due_on)}
                 </span>
               )}
-              {entry.tags.map((tag) => (
-                <span key={tag} className="rounded-full bg-background px-2 py-0.5">
-                  #{tag}
-                </span>
-              ))}
+              {entry.tags.map((tag) =>
+                onSelectTag ? (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => onSelectTag(tag)}
+                    className="rounded-full bg-background px-2 py-0.5 transition-colors hover:text-foreground"
+                  >
+                    #{tag}
+                  </button>
+                ) : (
+                  <span key={tag} className="rounded-full bg-background px-2 py-0.5">
+                    #{tag}
+                  </span>
+                ),
+              )}
             </div>
           )}
 
