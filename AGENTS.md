@@ -13,8 +13,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Next.js 16 (App Router, Turbopack) + Tailwind v4 + TypeScript
 - Supabase (Postgres + Auth)。プロジェクト ref: `hqjoncbueuadqxkkpdsn`（東京リージョン）
 - 認証はメールのマジックリンクのみ。パスワードは使わない
-- `src/proxy.ts` がセッション更新を担当（Next 16 で `middleware.ts` は非推奨）。
-  トップ画面を静的配信のままにするため、matcher は `/login` だけに絞ってある
+- セッションの更新は端末側のクライアントだけが担う。サーバー側でも触ると
+  cookie の書き手が二人になり、更新の競合でログアウトさせられる。
+  そのため `src/proxy.ts`（Next 16 で `middleware.ts` の後継）は置いていない
+- 開発中 (`npm run dev`) は既定で認証を切ってある。理由と戻し方は
+  `src/lib/dev-auth.ts` を参照。本番の build では必ず有効になる
 
 ## 画面の作り
 
@@ -43,3 +46,5 @@ RLS で `auth.uid() = user_id` の行だけ読み書きできる。新しいテ�
 - スキーマを変えたら `supabase/migrations/` に SQL を残し、型定義を生成し直す
 - アイコンを変えたら `node scripts/generate-icons.mjs`
 - `.env.local` は git 管理外。接続情報は `.env.example` を参照
+- 認証を切っている間、記録は端末の localStorage だけに貯まる。本物の控えとは
+  別の鍵に分けてあるので、認証を戻せば元の記録がそのまま出てくる

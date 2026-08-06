@@ -1,8 +1,11 @@
 import type { DayKey } from "@/lib/date";
+import { DEV_NO_AUTH } from "@/lib/dev-auth";
 import type { DayXp } from "@/lib/xp";
 
-const DAYS_KEY = "life-hub:xp-days:v1";
-const LEVEL_KEY = "life-hub:xp-level:v1";
+// 貯めた経験値は取り消さない決めごとなので、認証を切っている間の試し書きが
+// 混ざると本物のレベルが戻せなくなる。開発中は置き場所を分ける。
+const DAYS_KEY = DEV_NO_AUTH ? "life-hub:xp-days:dev" : "life-hub:xp-days:v1";
+const LEVEL_KEY = DEV_NO_AUTH ? "life-hub:xp-level:dev" : "life-hub:xp-level:v1";
 
 /**
  * 一覧の読み込みは直近500件までなので、記録が積もると古い分が視界から外れる。

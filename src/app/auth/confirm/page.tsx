@@ -4,6 +4,7 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { DEV_NO_AUTH } from "@/lib/dev-auth";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -15,6 +16,13 @@ export default function ConfirmPage() {
   const router = useRouter();
 
   useEffect(() => {
+    // 認証を切っている間はリンクを交換しない。
+    // 交換すると使い捨てのリンクをここで無駄にしてしまう。
+    if (DEV_NO_AUTH) {
+      router.replace("/");
+      return;
+    }
+
     // useSearchParams を使うと静的配信でなくなるため、URL から直接読む
     const params = new URLSearchParams(window.location.search);
 

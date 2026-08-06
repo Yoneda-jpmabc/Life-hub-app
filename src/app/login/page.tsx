@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect } from "react";
 
 import { LoginForm } from "@/components/login-form";
+import { DEV_NO_AUTH } from "@/lib/dev-auth";
 import { createClient } from "@/lib/supabase/client";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -32,6 +33,12 @@ export default function LoginPage() {
   const router = useRouter();
 
   useEffect(() => {
+    // 認証を切っている間はここに用がない。古いブックマークで来ても本編へ返す。
+    if (DEV_NO_AUTH) {
+      router.replace("/");
+      return;
+    }
+
     // すでに入っているなら本編へ返す
     (async () => {
       const {

@@ -9,6 +9,7 @@ import { EntryItem, type EntryPatch } from "@/components/entry-item";
 import { StatusBar } from "@/components/status-bar";
 import { TagFilter } from "@/components/tag-filter";
 import { todayKey } from "@/lib/date";
+import { DEV_NO_AUTH, DEV_USER_ID } from "@/lib/dev-auth";
 import { clearCache, readCache, writeCache } from "@/lib/entry-cache";
 import {
   ENTRY_KINDS,
@@ -23,7 +24,13 @@ import { createClient } from "@/lib/supabase/client";
 import { buildStatus, collectDays } from "@/lib/xp";
 import { clearXpCache, mergeDays, readDays, writeDays } from "@/lib/xp-cache";
 
-const supabase = createClient();
+/**
+ * 呼ばれたときに初めて用意する。createClient は同じものを返すので毎回作り直しにはならない。
+ *
+ * 認証を切っている間はここを一度も呼ばない。作るだけでトークンの自動更新が
+ * 動き出し、置いてあるだけで本物のセッションを使い減らしてしまうため。
+ */
+const db = () => createClient();
 
 type View = EntryKind | "all";
 /** 一覧とカレンダーは絞り込みではなく見方そのものが違うので、画面を分ける。 */
@@ -34,8 +41,9 @@ export function HomeScreen() {
   const [entries, setEntries] = useState<Entry[]>(() => readCache() ?? []);
   // 端末に貯めてある日ごとの経験値。読み込みの窓から外れた古い分をここで支える
   const [storedDays] = useState(() => readDays());
-  const [ready, setReady] = useState(false);
-  const [userId, setUserId] = useState("");
+  // 認証を切っている間は待つものがないので、最初から開いた状態で始める
+  const [ready, setReady] = useState(DEV_NO_AUTH);
+  const [userId, setUserId] = useState(DEV_NO_AUTH ? DEV_USER_ID : "");
   const [view, setView] = useState<View>("all");
   /** 選んだタグ。null なら絞り込まない。 */
   const [tag, setTag] = useState<string | null>(null);
@@ -50,13 +58,17 @@ export function HomeScreen() {
   }, []);
 
   useEffect(() => {
+    // 認証を切っている間はサーバーに触らず、端末に貯めてある分だけで動かす。
+    // entries も ready も控えから始まっているので、ここですることはない。
+    if (DEV_NO_AUTH) return;
+
     let alive = true;
 
     (async () => {
       // getSession は手元の cookie を読むだけなので通信が発生しない
       const {
         data: { session },
-      } = await supabase.auth.getSession();
+      } = await db().auth.getSession();
 
       if (!session) {
         router.replace("/login");
@@ -65,7 +77,7 @@ export function HomeScreen() {
       if (!alive) return;
       setUserId(session.user.id);
 
-      const { data, error: fetchError } = await supabase
+      const { data, error: fetchError } = await db()
         .from("entries")
         .select("*")
         .eq("archived", false)
@@ -91,6 +103,9 @@ export function HomeScreen() {
     const previous = entries;
     commit(next);
     setError(null);
+
+    // 認証を切っている間は書き込む先がない。画面と端末の控えだけで完結させる。
+    if (DEV_NO_AUTH) return;
 
     const { error: writeError } = await run();
     if (writeError) {
@@ -127,7 +142,7 @@ export function HomeScreen() {
     };
 
     void apply([entry, ...entries], async () =>
-      supabase.from("entries").insert({
+      db().from("entries").insert({
         id: entry.id,
         kind: entry.kind,
         body: entry.body,
@@ -151,7 +166,7 @@ export function HomeScreen() {
         item.id === existing.id ? { ...item, minutes, body } : item,
       );
       void apply(next, async () =>
-        supabase.from("entries").update({ minutes, body }).eq("id", existing.id),
+        db().from("entries").update({ minutes, body }).eq("id", existing.id),
       );
       return;
     }
@@ -173,7 +188,7 @@ export function HomeScreen() {
     };
 
     void apply([entry, ...entries], async () =>
-      supabase.from("entries").insert({
+      db().from("entries").insert({
         id: entry.id,
         kind: entry.kind,
         body: entry.body,
@@ -190,18 +205,18 @@ export function HomeScreen() {
         ? { ...item, done, done_at: done ? new Date().toISOString() : null }
         : item,
     );
-    void apply(next, async () => supabase.from("entries").update({ done }).eq("id", id));
+    void apply(next, async () => db().from("entries").update({ done }).eq("id", id));
   }
 
   function handleUpdate(id: string, patch: EntryPatch) {
     const next = entries.map((item) => (item.id === id ? { ...item, ...patch } : item));
-    void apply(next, async () => supabase.from("entries").update(patch).eq("id", id));
+    void apply(next, async () => db().from("entries").update(patch).eq("id", id));
   }
 
   function handleDelete(id: string) {
     void apply(
       entries.filter((item) => item.id !== id),
-      async () => supabase.from("entries").delete().eq("id", id),
+      async () => db().from("entries").delete().eq("id", id),
     );
   }
 
@@ -211,7 +226,7 @@ export function HomeScreen() {
     if (!window.confirm("ログアウトする？ 次に入るときはメールのリンクが要る。")) {
       return;
     }
-    await supabase.auth.signOut();
+    await db().auth.signOut();
     clearCache();
     clearXpCache();
     router.replace("/login");
@@ -268,13 +283,23 @@ export function HomeScreen() {
           >
             {mode === "calendar" ? "一覧へ" : "カレンダー"}
           </button>
-          <button
-            type="button"
-            onClick={handleSignOut}
-            className="text-muted hover:text-foreground"
-          >
-            ログアウト
-          </button>
+          {/* 認証を切っている間は出す先がない。代わりに切れていることを見せておく */}
+          {DEV_NO_AUTH ? (
+            <span
+              title="開発中だけ認証を切ってある。保存先はこの端末の中だけ。"
+              className="rounded-full bg-surface px-2 py-1 text-muted ring-1 ring-border"
+            >
+              ローカル
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="text-muted hover:text-foreground"
+            >
+              ログアウト
+            </button>
+          )}
         </div>
       </header>
 
